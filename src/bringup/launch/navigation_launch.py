@@ -142,16 +142,6 @@ def generate_launch_description():
                 parameters=[configured_params]
             ),
             Node(
-                package="fake_vel_transform",
-                executable="fake_vel_transform_node",
-                name="fake_vel_transform",
-                output="screen",
-                respawn=use_respawn,
-                respawn_delay=2.0,
-                parameters=[configured_params],
-                arguments=["--ros-args", "--log-level", log_level],
-            ),
-            Node(
                 package="nav2_controller",
                 executable="controller_server",
                 name="controller_server",
@@ -244,100 +234,6 @@ def generate_launch_description():
         ],
     )
 
-    load_composable_nodes = LoadComposableNodes(
-        condition=IfCondition(use_composition),
-        target_container=container_name_full,
-        composable_node_descriptions=[
-            ComposableNode(
-                package="fake_vel_transform",
-                plugin="fake_vel_transform::FakeVelTransform",
-                name="fake_vel_transform",
-                parameters=[configured_params],
-            ),
-            ComposableNode(
-                package='nav2_map_server',
-                plugin='nav2_map_server::MapServer',
-                name='map_server',
-                parameters=[configured_params],
-            ),
-            ComposableNode(
-                package='nav2_map_server',
-                plugin='nav2_map_server::MapServer',
-                name='map_server',
-                parameters=[configured_params],
-            ),
-            ComposableNode(
-                package="nav2_controller",
-                plugin="nav2_controller::ControllerServer",
-                name="controller_server",
-                parameters=[configured_params],
-                remappings=[("cmd_vel", "cmd_vel_controller")],
-            ),
-            ComposableNode(
-                package="nav2_controller",
-                plugin="nav2_controller::ControllerServer",
-                name="controller_server",
-                parameters=[configured_params],
-                remappings=[("cmd_vel", "cmd_vel_controller")],
-            ),
-            ComposableNode(
-                package="nav2_smoother",
-                plugin="nav2_smoother::SmootherServer",
-                name="smoother_server",
-                parameters=[configured_params],
-            ),
-            ComposableNode(
-                package="nav2_planner",
-                plugin="nav2_planner::PlannerServer",
-                name="planner_server",
-                parameters=[configured_params],
-            ),
-            ComposableNode(
-                package="nav2_behaviors",
-                plugin="behavior_server::BehaviorServer",
-                name="behavior_server",
-                parameters=[configured_params],
-                remappings=[
-                    ("cmd_vel", "cmd_vel_nav2_result"),  # remap output
-                ],
-            ),
-            ComposableNode(
-                package="nav2_bt_navigator",
-                plugin="nav2_bt_navigator::BtNavigator",
-                name="bt_navigator",
-                parameters=[configured_params],
-            ),
-            ComposableNode(
-                package="nav2_waypoint_follower",
-                plugin="nav2_waypoint_follower::WaypointFollower",
-                name="waypoint_follower",
-                parameters=[configured_params],
-            ),
-            ComposableNode(
-                package="nav2_velocity_smoother",
-                plugin="nav2_velocity_smoother::VelocitySmoother",
-                name="velocity_smoother",
-                parameters=[configured_params],
-                remappings=[
-                    ("cmd_vel", "cmd_vel_controller"),  # remap input
-                    ("cmd_vel_smoothed", "cmd_vel_nav2_result"),  # remap output
-                ],
-            ),
-            ComposableNode(
-                package="nav2_lifecycle_manager",
-                plugin="nav2_lifecycle_manager::LifecycleManager",
-                name="lifecycle_manager_navigation",
-                parameters=[
-                    {
-                        "use_sim_time": use_sim_time,
-                        "autostart": autostart,
-                        "node_names": lifecycle_nodes,
-                    }
-                ],
-            ),
-        ],
-    )
-
     # Create the launch description and populate
     ld = LaunchDescription()
 
@@ -360,6 +256,6 @@ def generate_launch_description():
     # ld.add_action(start_terrain_analysis_cmd)
     # ld.add_action(start_terrain_analysis_ext_cmd)
     ld.add_action(load_nodes)
-    ld.add_action(load_composable_nodes)
+    # ld.add_action(load_composable_nodes)
 
     return ld

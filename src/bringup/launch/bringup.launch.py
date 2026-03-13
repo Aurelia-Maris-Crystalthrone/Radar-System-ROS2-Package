@@ -82,13 +82,19 @@ def generate_launch_description():
             package='tf2_ros',
             executable='static_transform_publisher',
             name='map_to_odom',
-            arguments=['0', '0', '0', '0', '0', '0', 'map', 'aft_mapped']
+            arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
         ),
         Node(
             package='tf2_ros',
             executable='static_transform_publisher',
             name='base_footprint_to_livox_frame',
-            arguments=['0', '-0.1682', '0.32', '0', '0', '0.785398', 'base_footprint', 'livox_frame']
+            arguments=['0', '-0.1682', '0.396', '0', '0', '0', 'base_footprint', 'livox_frame']
+        ),
+        Node(
+            package='tf2_ros',
+            executable='static_transform_publisher',
+            name='enermy_base_to_odom',
+            arguments=['21.5', '0', '0', '0', '0', '0', 'odom', 'enermy_base']
         ),
         Node(
             package='tf2_ros',
@@ -140,23 +146,6 @@ def generate_launch_description():
             ]),
             launch_arguments={'use_sim_time': use_sim_time}.items()
         ),
-        Node(
-            package='bringup',
-            executable='odom_to_tf',
-            name='odom_to_tf',
-            output='screen',
-            parameters=[{
-                'odom_topic': '/Odometry',
-                'parent_frame': 'aft_mapped',
-                'child_frame': 'livox_frame'
-            }]
-        ),
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='body_to_base_footprint',
-            arguments=['0', '0', '0', '0', '0', '0', 'body', 'base_footprint']
-        ),
         IncludeLaunchDescription(
             launch_description_source=PythonLaunchDescriptionSource([
                 PathJoinSubstitution([
@@ -179,8 +168,8 @@ def generate_launch_description():
         ),
         # 5. 启动self_filter_node
         Node(
-                package='bringup',  # 包名，应该与CMakeLists.txt中的project一致
-                executable='self_filter_node',  # 可执行文件名
+                package='bringup',  
+                executable='self_filter_node', 
                 name='self_filter_node',
                 output='screen',
                 parameters=[{'use_sim_time': use_sim_time}
