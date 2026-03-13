@@ -1,58 +1,87 @@
 cmake_minimum_required(VERSION 3.8)
 project(bringup)
 
+# 设置策略以抑制警告
+if(POLICY CMP0074)
+  cmake_policy(SET CMP0074 NEW)
+endif()
+
+# Default to C++17
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+
+# 如果支持，添加编译器警告
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-# find dependencies
+# ============ 查找依赖包 ============
 find_package(ament_cmake REQUIRED)
+
+# ROS2核心依赖
 find_package(rclcpp REQUIRED)
 find_package(tf2_ros REQUIRED)
-find_package(tf2_geometry_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(std_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+# ============ 添加PCL依赖 ============
+find_package(PCL REQUIRED)
+if(PCL_FOUND)
+  message(STATUS "PCL found: version ${PCL_VERSION}")
+  # 包含PCL头文件路径
+  include_directories(${PCL_INCLUDE_DIRS})
+endif()
 
-add_executable(base_to_robot src/base_to_robot.cpp)
-ament_target_dependencies(base_to_robot
+# ============ 添加pcl_conversions ============
+find_package(pcl_conversions REQUIRED)
+
+# ============ 添加Eigen3（用于矩阵运算）============
+find_package(Eigen3 REQUIRED)
+include_directories(${EIGEN3_INCLUDE_DIRS})
+
+
+# ============ 添加点云过滤节点 ============
+add_executable(self_filter_node
+  src/self_filter_node.cpp  # 这是独立的文件
+)
+
+target_link_libraries(self_filter_node
+  ${rclcpp_LIBRARIES}
+  ${tf2_ros_LIBRARIES}
+  ${geometry_msgs_LIBRARIES}
+  ${tf2_LIBRARIES}
+  ${sensor_msgs_LIBRARIES}
+  ${tf2_geometry_msgs_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${pcl_conversions_LIBRARIES}
+)
+
+ament_target_dependencies(self_filter_node
   rclcpp
   tf2_ros
+  geometry_msgs
+  tf2
+  sensor_msgs
   tf2_geometry_msgs
-  geometry_msgs
-  std_msgs
+  pcl_conversions
 )
-add_executable(odom_to_tf src/odom_to_tf.cpp)
-ament_target_dependencies(odom_to_tf
-  
-  rclcpp
-  nav_msgs
-  tf2_ros
-  geometry_msgs
-)
+
 install(TARGETS
-  base_to_robot odom_to_tf
+  self_filter_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
+# ============ 安装文件 ============
 install(
-  DIRECTORY launch map rviz config behavior_tree
+  DIRECTORY behavior_tree config launch map rviz 
   DESTINATION share/${PROJECT_NAME}
 )
 
 
-if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  # the following line skips the linter which checks for copyrights
-  # comment the line when a copyright and license is added to all source files
-  set(ament_cmake_copyright_FOUND TRUE)
-  # the following line skips cpplint (only works in a git repo)
-  # comment the line when this package is in a git repo and when
-  # a copyright and license is added to all source files
-  set(ament_cmake_cpplint_FOUND TRUE)
-  ament_lint_auto_find_test_dependencies()
-endif()
-
+# ============ 导出依赖 ============
 ament_export_dependencies(
   rclcpp
   tf2_ros
@@ -60,6 +89,7 @@ ament_export_dependencies(
   tf2
   sensor_msgs
   tf2_geometry_msgs
+  pcl_conversions
   std_msgs
 )
 

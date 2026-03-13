@@ -157,33 +157,34 @@ def generate_launch_description():
             name='body_to_base_footprint',
             arguments=['0', '0', '0', '0', '0', '0', 'body', 'base_footprint']
         ),
-        # 启动 base_to_robot 节点
-        Node(
-            package='bringup',
-            executable='base_to_robot',
-            name='base_to_robot',
-            output='screen',
-            parameters=[{
-                'use_sim_time': use_sim_time,
-                'target_frame': 'base_footprint',   # 明确指定正确的坐标系
-                'base_x': 0.0,                       # 如果有实际基地坐标，请修改
-                'base_y': 0.0,
-                'base_z': 0.0
-            }]
+        IncludeLaunchDescription(
+            launch_description_source=PythonLaunchDescriptionSource([
+                PathJoinSubstitution([
+                    FindPackageShare('loam_interface'),
+                    'launch',
+                    'loam_interface_launch.py'
+                ])
+            ]),
+            launch_arguments={'use_sim_time': use_sim_time}.items()
         ),
-        # 添加 odom_to_tf 节点
-        Node(
-            package='bringup',
-            executable='odom_to_tf',
-            name='odom_to_tf',
-            output='screen',
-            parameters=[{
-                'odom_topic': '/Odometry',           # 根据实际话题名修改
-                'parent_frame': 'aft_mapped',
-                'child_frame': 'livox_frame'
-            }]
+        IncludeLaunchDescription(
+            launch_description_source=PythonLaunchDescriptionSource([
+                PathJoinSubstitution([
+                    FindPackageShare('sensor_scan_generation'),
+                    'launch',
+                    'sensor_scan_generation.launch.py'
+                ])
+            ]),
+            launch_arguments={'use_sim_time': use_sim_time}.items()
         ),
-
+        # 5. 启动self_filter_node
+        Node(
+                package='bringup',  # 包名，应该与CMakeLists.txt中的project一致
+                executable='self_filter_node',  # 可执行文件名
+                name='self_filter_node',
+                output='screen',
+                parameters=[{'use_sim_time': use_sim_time}
+            ]),
         # 启动 rviz2（使用声明的配置文件）
         Node(
             package="rviz2",
