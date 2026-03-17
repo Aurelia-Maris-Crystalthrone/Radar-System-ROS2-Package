@@ -102,12 +102,6 @@ def generate_launch_description():
             name='aft_mapped_to_body',
             arguments=['0', '0', '0', '0', '0', '0', 'aft_mapped', 'body']
         ),
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='body_to_base_footprint',
-            arguments=['0', '0', '0', '0', '0', '0', 'body', 'base_footprint']
-        ),
         # 包含导航启动（navigation_launch.py）
         IncludeLaunchDescription(
             launch_description_source=PythonLaunchDescriptionSource([
@@ -174,6 +168,13 @@ def generate_launch_description():
                 output='screen',
                 parameters=[{'use_sim_time': use_sim_time}
             ]),
+        Node(
+            package='bringup',
+            executable='tf_diff_calculator',
+            name='tf_diff_calculator',
+            output='screen',
+            parameters=[{'use_sim_time': use_sim_time}]
+        ),
         # 启动 rviz2（使用声明的配置文件）
         Node(
             package="rviz2",

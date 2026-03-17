@@ -47,7 +47,9 @@ include_directories(${EIGEN3_INCLUDE_DIRS})
 add_executable(self_filter_node
   src/self_filter_node.cpp  # 这是独立的文件
 )
-
+add_executable(tf_diff_calculator
+  src/tf_diff_calculator.cpp  # 这是独立的文件
+)
 target_link_libraries(self_filter_node
   ${rclcpp_LIBRARIES}
   ${tf2_ros_LIBRARIES}
@@ -58,7 +60,13 @@ target_link_libraries(self_filter_node
   ${PCL_LIBRARIES}
   ${pcl_conversions_LIBRARIES}
 )
-
+target_link_libraries(tf_diff_calculator
+  ${rclcpp_LIBRARIES}
+  ${tf2_ros_LIBRARIES}
+  ${geometry_msgs_LIBRARIES}
+  ${tf2_LIBRARIES}
+  ${tf2_geometry_msgs_LIBRARIES}
+)
 ament_target_dependencies(self_filter_node
   rclcpp
   tf2_ros
@@ -69,8 +77,16 @@ ament_target_dependencies(self_filter_node
   pcl_conversions
 )
 
+ament_target_dependencies(tf_diff_calculator
+  rclcpp
+  tf2
+  tf2_ros
+  tf2_geometry_msgs
+  geometry_msgs
+)
+
 install(TARGETS
-  self_filter_node
+  self_filter_node tf_diff_calculator
   DESTINATION lib/${PROJECT_NAME}
 )
 
