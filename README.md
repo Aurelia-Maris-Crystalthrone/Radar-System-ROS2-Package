@@ -88,10 +88,6 @@ pip3 install transforms3d numpy matplotlib
 ```
 RM_LIDAR/
 ├── .vscode/                  # VS Code 配置（编译任务、调试）
-├── src/                       # 自定义源码
-│   ├── self_filter_node_segment/  # 自滤波节点（去除机器人本体点云）
-│   ├── self_filter_node.cpp       # 自滤波节点实现
-│   └── tf_diff_calculator.cpp     # 计算雷达与基座之间的 TF 差
 ├── bringup/                   # 启动相关
 │   ├── behavior_tree/         # 行为树 XML 定义（如导航、定位、吊射触发）
 │   ├── config/                # 参数配置文件
@@ -103,6 +99,10 @@ RM_LIDAR/
 │   ├── map/                   # 场地地图
 │   │   ├── rmuc_2026.pgm
 │   │   └── rmuc_2026.yaml
+|   ├── src/                       # 自定义源码
+│   |   ├── self_filter_node_segment/  # 自滤波节点（去除机器人本体点云）
+│   |   ├── self_filter_node.cpp       # 自滤波节点实现
+│   |   └── tf_diff_calculator.cpp     # 计算雷达与敌方基地之间的 TF 差
 │   └── rviz/                  # RViz 可视化配置
 │       ├── nav2_default_view.rviz
 │       ├── nav2_default_view2.rviz
