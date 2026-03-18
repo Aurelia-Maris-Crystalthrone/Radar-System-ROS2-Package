@@ -126,7 +126,7 @@ RM_LIDAR/
 2. **自点云滤除**：`self_filter_node` 根据机器人几何模型滤除自身点云。
 3. **目标提取**：对剩余点云进行聚类，结合地图先验提取敌方基地区域。
 4. **距离计算**：计算基地点云质心与机器人炮口坐标的欧氏距离。
-5. **输出**：发布 `/target_distance` 话题，同时可发布 `/target_marker` 用于 RViz 显示。
+5. **输出**：发布 `/radar/target_positionce` 话题，同时可用于 RViz 显示。
 
 ### 参数调优
 - 修改 `config/nav2_params.yaml` 中的 `amcl` 参数可提高定位精度，从而间接提升距离解算精度。

@@ -16,7 +16,7 @@ public:
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-        publisher_ = this->create_publisher<geometry_msgs::msg::TransformStamped>("/radar/target/position", 10);
+        publisher_ = this->create_publisher<geometry_msgs::msg::TransformStamped>("/radar/target_position", 10);
 
         // 0.1秒定时器，对应10Hz
         timer_ = this->create_wall_timer(100ms, std::bind(&TFDiffCalculator::calculate_and_publish, this));
