@@ -88,41 +88,37 @@ pip3 install transforms3d numpy matplotlib
 ```
 RM_LIDAR/
 ├── .vscode/                  # VS Code 配置（编译任务、调试）
-├── bringup/                   # 启动相关
-│   ├── behavior_tree/         # 行为树 XML 定义（如导航、定位、吊射触发）
-│   ├── config/                # 参数配置文件
-│   │   ├── nav2_params_terrain_adapt.yaml  # Navigation2 地形适配参数
-│   │   └── nav2_params.yaml                 # Navigation2 默认参数
-│   ├── launch/                # ROS 启动文件
-│   │   ├── bringup.launch.py  # 总启动文件
-│   │   └── navigation.launch.py # 仅启动导航相关节点
-│   ├── map/                   # 场地地图
-│   │   ├── rmuc_2026.pgm
-│   │   └── rmuc_2026.yaml
-|   ├── src/                       # 自定义源码
-│   │   ├── self_filter_node_segment/  # 自滤波节点（去除机器人本体点云）
-│   │   ├── self_filter_node.cpp       # 自滤波节点实现
-│   │   └── tf_diff_calculator.cpp     # 计算雷达与敌方基地之间的 TF 差
-│   ├── rviz/                  # RViz 可视化配置
-│   │   ├── nav2_default_view.rviz
-│   │   ├── nav2_default_view2.rviz
-│   │   ├── test_map.rviz
-│   │   ├── test.rviz
-│   │   └── test2.rviz
-│   ├── CMakeLists.txt
-│   ├── LICENSE
-│   └── package.xml
+├──src/
+│  ├── bringup/                   # 启动相关
+│  │   ├── behavior_tree/         # 行为树 XML 定义（如导航、定位、吊射触发）
+│  │   ├── config/                # 参数配置文件
+│  │   │   ├── nav2_params_terrain_adapt.yaml  # Navigation2 地形适配参数
+│  │   │   └── nav2_params.yaml                 # Navigation2 默认参数
+│  │   ├── launch/                # ROS 启动文件
+│  │   │   ├── bringup.launch.py  # 总启动文件
+│  │   │   └── navigation.launch.py # 仅启动导航相关节点
+│  │   ├── map/                   # 场地地图
+│  │   │   ├── rmuc_2026.pgm
+│  │   │   └── rmuc_2026.yaml
+│  |   ├── src/                       # 自定义源码
+│  │   │   ├── self_filter_node_segment/  # 自滤波节点（去除机器人本体点云）
+│  │   │   ├── self_filter_node.cpp       # 自滤波节点实现
+│  │   │   └── tf_diff_calculator.cpp     # 计算雷达与敌方基地之间的 TF 差
+│  │   ├── rviz/                  # RViz 可视化配置
+│  │   │   ├── nav2_default_view.rviz
+│  │   │   ├── nav2_default_view2.rviz
+│  │   │   ├── test_map.rviz
+│  │   │   ├── test.rviz
+│  │   │   └── test2.rviz
+│  │   ├── CMakeLists.txt
+│  │   ├── LICENSE
+│  │   └── package.xml
+│  ├── livox_ros_driver2         # Livox 官方驱动
+│  ├── loam_interface            # LOAM 里程计接口
+│  ├── point_lio                 # Point-LIO 里程计
+│  └── sensor_scan_generation    # 点云生成与预处理
 ```
 
-此外，项目中引用的外部仓库位于工作空间的 `src/` 下）：
-```
-src/
-├── bringup                   # 自定义启动包（与 RM_LIDAR/bringup 配合）
-├── livox_ros_driver2         # Livox 官方驱动
-├── loam_interface            # LOAM 里程计接口
-├── point_lio                 # Point-LIO 里程计
-└── sensor_scan_generation    # 点云生成与预处理
-```
 
 ## 吊射辅助专用说明
 ### 距离解算流程
