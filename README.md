@@ -100,21 +100,21 @@ RM_LIDAR/
 │   │   ├── rmuc_2026.pgm
 │   │   └── rmuc_2026.yaml
 |   ├── src/                       # 自定义源码
-│   |   ├── self_filter_node_segment/  # 自滤波节点（去除机器人本体点云）
-│   |   ├── self_filter_node.cpp       # 自滤波节点实现
-│   |   └── tf_diff_calculator.cpp     # 计算雷达与敌方基地之间的 TF 差
-│   └── rviz/                  # RViz 可视化配置
-│       ├── nav2_default_view.rviz
-│       ├── nav2_default_view2.rviz
-│       ├── test_map.rviz
-│       ├── test.rviz
-│       └── test2.rviz
-├── CMakeLists.txt
-├── LICENSE
-└── package.xml
+│   │   ├── self_filter_node_segment/  # 自滤波节点（去除机器人本体点云）
+│   │   ├── self_filter_node.cpp       # 自滤波节点实现
+│   │   └── tf_diff_calculator.cpp     # 计算雷达与敌方基地之间的 TF 差
+│   ├── rviz/                  # RViz 可视化配置
+│   │   ├── nav2_default_view.rviz
+│   │   ├── nav2_default_view2.rviz
+│   │   ├── test_map.rviz
+│   │   ├── test.rviz
+│   │   └── test2.rviz
+│   ├── CMakeLists.txt
+│   ├── LICENSE
+│   └── package.xml
 ```
 
-此外，项目中引用的外部仓库位于工作空间的 `src/` 下（第二张图片所示）：
+此外，项目中引用的外部仓库位于工作空间的 `src/` 下）：
 ```
 src/
 ├── bringup                   # 自定义启动包（与 RM_LIDAR/bringup 配合）
