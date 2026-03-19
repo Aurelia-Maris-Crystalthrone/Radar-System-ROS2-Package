@@ -1,6 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
+#include <geometry_msgs/msg/point_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <memory>
@@ -16,9 +17,8 @@ public:
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
-        publisher_ = this->create_publisher<geometry_msgs::msg::TransformStamped>("/radar/target_position", 10);
+        publisher_ = this->create_publisher<geometry_msgs::msg::PointStamped>("/radar/target_position", 10);
 
-        // 0.1秒定时器，对应10Hz
         timer_ = this->create_wall_timer(100ms, std::bind(&TFDiffCalculator::calculate_and_publish, this));
     }
 
@@ -29,15 +29,20 @@ private:
         std::string target_frame = "enermy_base";
 
         try {
+            // 使用 TransformStamped 接收变换
             geometry_msgs::msg::TransformStamped transform_stamped;
-            transform_stamped = tf_buffer_->lookupTransform(target_frame, source_frame, tf2::TimePointZero);
+            // 使用 rclcpp::Time(0) 获取最新变换（兼容构造函数）
+            transform_stamped = tf_buffer_->lookupTransform(target_frame, source_frame, rclcpp::Time(0));
 
-            transform_stamped.header.stamp = this->get_clock()->now();
-            transform_stamped.header.frame_id = source_frame;
-            transform_stamped.child_frame_id = target_frame;
+            // 构造点消息，提取平移部分
+            geometry_msgs::msg::PointStamped point_stamped;
+            point_stamped.header.stamp = this->get_clock()->now();
+            point_stamped.header.frame_id = target_frame;   // 点位于目标坐标系
+            point_stamped.point.x = transform_stamped.transform.translation.x;
+            point_stamped.point.y = transform_stamped.transform.translation.y;
+            point_stamped.point.z = transform_stamped.transform.translation.z;
 
-            publisher_->publish(transform_stamped);
-            // 已移除所有日志输出
+            publisher_->publish(point_stamped);
         } catch (tf2::TransformException &ex) {
             RCLCPP_WARN(this->get_logger(), "Transform error: %s", ex.what());
         }
@@ -45,7 +50,7 @@ private:
 
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-    rclcpp::Publisher<geometry_msgs::msg::TransformStamped>::SharedPtr publisher_;
+    rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr publisher_;
     rclcpp::TimerBase::SharedPtr timer_;
 };
 
