@@ -1,160 +1,199 @@
-# RM_LIDAR 雷达感知模块（英雄机器人吊射辅助）
+# RM_LIDAR 雷达感知与导航集成模块 (ROS 2)
 
-## 项目概述
-本项目为 **RobotMaster 超级对抗赛 2026** 定制开发的雷达感知模块，专门用于**英雄机器人吊射敌方基地**时的距离支持与辅助瞄准。模块基于 Livox MID-360 激光雷达，结合 ROS 框架实现实时战场环境感知、目标定位、距离解算，并将精确的距离信息发送至英雄机器人弹道解算节点，从而实现**高精度吊射**。
+[![ROS 2](https://img.shields.io/badge/ROS_2-Humble-blue)](https://docs.ros.org/en/humble/index.html)
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-地图采用 `rmuc_2026.pgm`（对应超级对抗赛 2026 场地），通过雷达数据与地图匹配，为英雄机器人提供敌方基地的相对坐标和直线距离（误差 ≤ 2cm），辅助完成吊射诸元解算。
+## 1. 项目概述
 
-## 核心功能
-| 功能项                | 详细说明                                                                 |
-|-----------------------|--------------------------------------------------------------------------|
-| 吊射距离解算          | 精准计算机器人炮口至敌方基地的直线距离，误差 ≤ 2cm，为弹道解算提供输入   |
-| 敌方基地识别          | 基于先验地图与雷达点云，识别基地位置（可配合视觉辅助提高置信度）         |
-| 实时定位与坐标系变换  | 将雷达坐标系下的目标转换至战场绝对坐标系（map），输出坐标 (x, y, θ)     |
-| 动态目标过滤          | 滤除移动机器人、观众等干扰点云，仅保留静态基地/掩体等关键目标            |
-| 异常数据容错          | 针对雷达遮挡、多路径干扰等做鲁棒处理，保证输出稳定性                     |
-| 数据轻量化传输        | 通过 ROS 话题发布精简后的距离信息，降低通信负载                          |
+本项目是一个专为 **RobotMaster 超级对抗赛 2026** 英雄机器人设计的集成化 ROS 2 工作空间。它集成了基于 **Livox MID-360** 激光雷达的实时环境感知、激光惯性里程计、自定义感知数据处理以及完整的 Navigation 2 导航框架。
 
-## 技术栈
-### 硬件适配
-- **雷达传感器**：Livox MID-360 激光雷达（通过 Livox ROS Driver 2 驱动）
-- **主控平台**：NVIDIA Jetson Orin / Xavier（运行 ROS 节点）
-- **通信**：以太网（ROS 分布式通信）、CAN（与下位机弹道解算模块交互）
+其核心目标是为下位机（如弹道解算单元）提供经过处理的**实时距离、位置数据**，并支持机器人在比赛场地内进行自主导航与避障。
 
-### 软件/算法
-- **操作系统**：Ubuntu 22.04
-- **ROS 版本**：ROS 2 Humble（推荐） / ROS 1 Noetic（可选）
-- **核心依赖**：
-  - [Livox ROS Driver 2](https://github.com/Livox-SDK/livox_ros_driver2)（雷达驱动）
-  - [Point-LIO](https://github.com/hku-mars/Point-LIO)（激光惯性里程计，可选用于位姿估计）
-  - [LOAM Interface](https://github.com/wh200720041/loam_interface)（激光里程计适配）
-  - [Navigation2](https://navigation.ros.org/)（用于地图与路径规划，辅助定位）
-  - BehaviorTree.CPP（行为树，用于任务调度）
-- **核心算法**：
-  - 卡尔曼滤波（点云降噪）
-  - 聚类与目标提取（基于欧氏距离）
-  - 坐标系变换（`tf2`）
+## 2. 系统架构与数据流
 
-## 快速开始
-### 环境依赖
+系统由多个 ROS 2 包协同工作，形成一个完整的数据处理链路：
+
+| 模块 | 功能 | 关键节点 |
+| :--- | :--- | :--- |
+| **传感器驱动** | 驱动 Livox MID-360 雷达，发布原始点云。 | `livox_ros_driver2` |
+| **里程计 (Odometry)** | 通过 Point-LIO 算法融合 IMU 和激光雷达数据，提供高频、低漂移的位姿估计。 | `point_lio` |
+| **地形分析** | 将三维点云转化为二维代价地图 (Costmap)，用于导航。 | `terrain_analysis` |
+| **感知处理** | 自定义节点，负责去除机器人自身的点云和整理数据。 | `self_filter_node`, `radar_to_serial_node` |
+| **导航框架** | 提供全局/局部路径规划、控制、行为树等完整的自主导航功能。 | `planner_server`, `controller_server`, `bt_navigator` |
+| **坐标变换** | 管理机器人各部件之间的 TF 变换关系。 | `tf_diff_calculator` |
+
+**核心数据流:**
+
+```mermaid
+graph TD
+    A[Livox MID-360] -->|/livox/lidar| B(point_lio)
+    A -->|/livox/lidar| E(sensor_scan_generation)
+    B -->|/Odometry| C(loam_interface)
+    C -->|/cloud_registered| D(terrain_analysis)
+    D -->|/terrain_map| F(Nav2 Costmap)
+    C -->|/aft_mapped_to_init| G(tf_diff_calculator)
+    A -->|/livox/lidar| H(self_filter_node)
+    G -->|/radar/target_position| I(radar_to_serial_node)
+    H -->|/pointclouds_self_filter| I
+    I -->|Serial Data| J[下位机 (MCU)]
+```
+
+### 项目文件结构
+
+```
+Radar-System-ROS2-Package/
+├── bringup/                          # 核心启动与集成包
+│   ├── CMakeLists.txt
+│   ├── package.xml
+│   ├── launch/
+│   │   ├── bringup.launch.py        # 系统总启动文件
+│   │   ├── navigation_launch.py     # Nav2 导航子启动
+│   │   └── pointlio_launch.py       # Point-LIO 子启动
+│   ├── config/
+│   │   ├── nav2_params_terrain_analysis.yaml  # 导航参数配置
+│   │   └── mapper_params_online.yaml          # 定位建图参数
+│   ├── src/
+│   │   ├── self_filter_node.cpp               # 自身点云滤除节点
+│   │   ├── radar_to_serial_node.cpp           # 串口数据转发节点
+│   │   └── sensor_scan_generation_node.cpp    # 扫描生成节点
+│   └── include/
+│       └── bringup/
+├── terrain_analysis/                 # 地形分析包
+│   ├── CMakeLists.txt
+│   ├── package.xml
+│   └── src/
+│       └── terrain_analysis.cpp
+├── loam_interface/                   # 里程计接口适配包
+│   ├── CMakeLists.txt
+│   ├── package.xml
+│   └── src/
+│       └── loam_interface_node.cpp
+├── point_lio/                        # Point-LIO 激光惯性里程计
+│   ├── CMakeLists.txt
+│   ├── package.xml
+│   ├── include/point_lio/
+│   └── src/
+├── livox_ros_driver2/                # Livox 雷达 ROS 2 驱动
+│   ├── CMakeLists.txt
+│   ├── package.xml
+│   ├── launch_ROS2/
+│   ├── config/
+│   │   └── MID360_config.json        # 雷达网络配置
+│   └── src/
+├── sensor_scan_generation/           # 扫描数据生成包
+│   ├── CMakeLists.txt
+│   └── package.xml
+├── tf_diff_calculator/               # TF 坐标差值计算包
+│   ├── CMakeLists.txt
+│   └── package.xml
+├── navigation2/                      # Nav2 官方包（作为子模块或拷贝）
+│   └── (nav2_* 系列包)
+├── README.md
+└── LICENSE
+```
+
+> **说明**：实际开发中主要关注 `bringup` 包内的启动与配置文件，以及 `livox_ros_driver2/config/MID360_config.json` 中的雷达网络设置。
+
+## 3. 节点详解 (bringup 包)
+
+此部分详细说明了 `bringup` 包中实现的自定义功能节点。
+
+- **`self_filter_node`**: 通过一个固定的立方体范围 (`CropBox`) 滤除属于机器人本体的点云。这对于防止机器人在导航时将自身部件误识别为障碍物至关重要。
+- **`tf_diff_calculator`**: 一个简单的 TF 监听节点。它以 10Hz 的频率查询 `odom` 坐标系与 `enermy_base` 坐标系之间的变换，并将其作为 `PointStamped` 消息发布到 `/radar/target_position` 话题。
+- **`radar_to_serial_node`**: 数据聚合与通信节点。它订阅 `/radar/distance`、`/radar/position` 和 `/radar/base_point` 三个话题，将数据整合后，通过配置的串口（默认 `/dev/ttyUSB0`, 115200 波特率）以 20Hz 的频率发送给下位机。
+
+## 4. 环境与硬件要求
+
+### 4.1 软件依赖
+
+- **操作系统**: Ubuntu 22.04
+- **ROS 2 发行版**: Humble
+- **核心依赖**:
+  - `ros-humble-nav2-*`
+  - `ros-humble-behaviortree-cpp-v3`
+  - `python3-transforms3d`, `python3-numpy`, `python3-matplotlib`
+  - `pcl_conversions` (点云处理)
+  - `serial` (串口通信)
+
+### 4.2 硬件要求
+
+- **激光雷达**: Livox MID-360
+- **主控平台**: NVIDIA Jetson Orin / Xavier (推荐) 或性能相当的 x86 工控机
+- **通信接口**: 以太网 (连接雷达) 与 UART/CAN (通过串口与下位机通信)
+
+## 5. 快速开始
+
+### 5.1 创建工作空间并克隆代码
+
 ```bash
-# 安装 ROS 2 Humble（参考官方文档）
-# 安装 Livox ROS Driver 2
 mkdir -p ~/rm_ws/src
 cd ~/rm_ws/src
-git clone https://github.com/Livox-SDK/livox_ros_driver2.git
-# 编译
+git clone https://github.com/Aurelia-Maris-Crystalthrone/Radar-System-ROS2-Package.git .
+```
+
+### 5.2 安装依赖
+
+```bash
+# 安装 ROS 2 依赖
 cd ~/rm_ws
-colcon build --packages-select livox_ros_driver2
+rosdep install --from-paths src --ignore-src -r -y
 
-# 安装其他依赖
-sudo apt install ros-humble-nav2-* ros-humble-behaviortree-cpp-v3
-pip3 install transforms3d numpy matplotlib
+# 安装 Python 依赖
+pip3 install transforms3d numpy matplotlib pyserial
 ```
 
-### 部署步骤
-1. **硬件连接**  
-   - 将 Livox MID-360 通过以太网连接至 Jetson 主控（静态 IP 配置参考雷达手册）。
-   - 确保雷达供电（12V / 24V，根据型号）稳定。
+### 5.3 编译工作空间
 
-2. **配置雷达参数**  
-   修改 `config/livox_config.json` 中的雷达 IP 和波特率，匹配实际设备。
-
-3. **地图准备**  
-   将比赛场地地图 `rmuc_2026.pgm` 及对应的 `rmuc_2026.yaml` 放入 `map/` 目录，并修改 `launch/navigation.launch.py` 中的地图路径。
-
-4. **启动雷达感知模块**  
-   ```bash
-   cd ~/rm_ws
-   source install/setup.bash
-   ros2 launch rm_lidar bringup.launch.py
-   ```
-   该启动文件将依次启动：
-   - Livox 雷达驱动
-   - 点云预处理节点（`sensor_scan_generation`）
-   - 自滤波节点（`self_filter_node`，用于去除机器人自身点云）
-   - 目标提取与距离解算节点
-   - TF 变换计算节点（`tf_diff_calculator`，用于计算雷达与机器人基座的相对位姿）
-   - Navigation2 定位模块（可选，用于地图匹配）
-   - RViz 可视化界面（默认配置 `rviz/nav2_default_view2.rviz`）
-
-5. **查看距离输出**  
-   距离信息通过 ROS 话题 `/target_distance` 发布，格式为 `std_msgs/Float64`。可订阅该话题并转发至下位机：
-   ```bash
-   ros2 topic echo /target_distance
-   ```
-
-## 代码结构说明
-```
-RM_LIDAR/
-├── .vscode/                  # VS Code 配置（编译任务、调试）
-├──src/
-│  ├── bringup/                   # 启动相关
-│  │   ├── behavior_tree/         # 行为树 XML 定义（如导航、定位、吊射触发）
-│  │   ├── config/                # 参数配置文件
-│  │   │   ├── nav2_params_terrain_adapt.yaml  # Navigation2 地形适配参数
-│  │   │   └── nav2_params.yaml                 # Navigation2 默认参数
-│  │   ├── launch/                # ROS 启动文件
-│  │   │   ├── bringup.launch.py  # 总启动文件
-│  │   │   └── navigation.launch.py # 仅启动导航相关节点
-│  │   ├── map/                   # 场地地图
-│  │   │   ├── rmuc_2026.pgm
-│  │   │   └── rmuc_2026.yaml
-│  |   ├── src/                       # 自定义源码
-│  │   │   ├── self_filter_node_segment/  # 自滤波节点（去除机器人本体点云）
-│  │   │   ├── self_filter_node.cpp       # 自滤波节点实现
-│  │   │   └── tf_diff_calculator.cpp     # 计算雷达与敌方基地之间的 TF 差
-│  │   ├── rviz/                  # RViz 可视化配置
-│  │   │   ├── nav2_default_view.rviz
-│  │   │   ├── nav2_default_view2.rviz
-│  │   │   ├── test_map.rviz
-│  │   │   ├── test.rviz
-│  │   │   └── test2.rviz
-│  │   ├── CMakeLists.txt
-│  │   ├── LICENSE
-│  │   └── package.xml
-│  ├── livox_ros_driver2         # Livox 官方驱动
-│  ├── loam_interface            # LOAM 里程计接口
-│  ├── point_lio                 # Point-LIO 里程计
-│  └── sensor_scan_generation    # 点云生成与预处理
+```bash
+cd ~/rm_ws
+colcon build --symlink-install
+source install/setup.bash
 ```
 
+## 6. 配置指南
 
-## 吊射辅助专用说明
-### 距离解算流程
-1. **雷达点云获取**：通过 `livox_ros_driver2` 获取原始点云。
-2. **自点云滤除**：`self_filter_node` 根据机器人几何模型滤除自身点云。
-3. **目标提取**：对剩余点云进行聚类，结合地图先验提取敌方基地区域。
-4. **距离计算**：计算基地点云质心与机器人炮口坐标的欧氏距离。
-5. **输出**：发布 `/radar/target_positionce` 话题，同时可用于 RViz 显示。
+启动前，请根据实际情况修改以下配置文件：
 
-### 参数调优
-- 修改 `config/nav2_params.yaml` 中的 `amcl` 参数可提高定位精度，从而间接提升距离解算精度。
-- 在 `self_filter_node.cpp` 中调整 `robot_radius` 等参数可优化自身点云滤除效果。
-- 目标提取聚类阈值可通过 `config/cluster_params.yaml` 设置（若已实现）。
+1.  **雷达 IP 配置**: 修改 `src/livox_ros_driver2/config/MID360_config.json`，确保 `lidar_configs` 下的 IP 地址与你的雷达一致。
+2.  **TF 变换配置**: 在 `src/bringup/launch/bringup.launch.py` 中，修改 `base_footprint_to_livox_frame` 等静态 TF 发布者的 `arguments` 参数，以匹配雷达在机器人上的实际安装位置。
+3.  **串口配置**: 启动时可通过参数指定串口设备和波特率，或修改启动文件中的默认值 (`/dev/ttyUSB0`, `115200`)。
+4.  **导航参数**: 根据机器人尺寸和性能，调整 `src/bringup/config/nav2_params_terrain_analysis.yaml` 中的机器人半径 (`robot_radius`)、速度 (`max_velocity`) 等参数。
+5.  **自滤波范围**: 在 `src/bringup/src/self_filter_node_segmentation.cpp` 中，调整 `CropBox` 的 `min_pt` 和 `max_pt` 向量值，以确保能精确滤除机器人自身的点云。
 
-## 赛事适配建议
-1. **坐标系校准**：确保雷达与机器人基座的 TF 变换准确，可使用 `tf_diff_calculator` 动态计算偏差。
-2. **地图更新**：比赛场地可能有微小变化，建议在赛前使用激光 SLAM 重新建图（可使用 `point_lio` 或 `loam_interface`）。
-3. **通信接口**：若下位机需要特定格式的距离数据，可修改发布节点，适配自定义消息（如添加时间戳、置信度）。
-4. **冗余设计**：同时运行视觉辅助识别基地，当雷达数据异常时切换至视觉数据，提高可靠性。
+## 7. 运行系统
 
-## 调试与常见问题
-| 问题现象                  | 可能原因                          | 解决方案                                  |
-|---------------------------|-----------------------------------|-------------------------------------------|
-| 雷达无数据输出            | IP 配置错误 / 供电异常            | 检查雷达 IP（默认 192.168.1.50），ping 测试 |
-| 距离输出跳变              | 基地点云聚类不稳定 / 自身滤除不彻底 | 增大聚类半径，检查 `self_filter_node` 参数 |
-| TF 变换错误               | 雷达安装角度偏移                  | 重新标定，修改 `tf_diff_calculator` 中的偏移量 |
-| Navigation2 定位漂移      | AMCL 参数不当 / 地图特征不足       | 调整粒子滤波器参数，增加雷达匹配权重      |
+使用主启动文件 `bringup.launch.py` 即可启动所有模块：
 
-## 相关链接
-- [QD 算法库](https://nomane-0.github.io/QD_Algorithm_Library/#/) —— 包含滤波、聚类、坐标变换等基础算法，可供参考或集成
-- [PB2025 哨兵导航项目](https://gitee.com/SMBU-POLARBEAR/pb2025_sentry_nav) —— 类似的 Navigation2 配置与行为树示例，可借鉴其导航与定位模块
+```bash
+# 启动全部功能
+ros2 launch bringup bringup.launch.py
 
-## 维护与贡献
-- 维护者：[Aurelia-Maris-Crystalthrone]
-- 联系方式：[3792458256@qq.com]
-- 欢迎团队内部提交代码优化建议，提交前请确保通过测试脚本验证功能稳定性。
+# 带参数启动示例：指定地图和RViz配置文件
+ros2 launch bringup bringup.launch.py map:=/path/to/your/map.yaml rviz_config:=/path/to/your/rviz.rviz
+```
 
-## 版权与声明
-本项目为 RobotMaster 超级对抗赛 2026 参赛自研模块，仅供参赛学习使用，禁止商用。使用过程中需遵守机甲大师赛事规则，不得修改雷达硬件参数规避赛事限制。# Radar-System-ROS2-Package
+启动文件将按顺序启动雷达驱动、定位、感知处理和导航框架。
+
+## 8. 关键 ROS 话题
+
+| 话题名 | 消息类型 | 描述 |
+| :--- | :--- | :--- |
+| `/livox/lidar` | `sensor_msgs/PointCloud2` | 原始点云数据。 |
+| `/cloud_registered` | `sensor_msgs/PointCloud2` | 经里程计校正后的点云。 |
+| `/radar/target_position` | `geometry_msgs/PointStamped` | 目标点在 `enermy_base` 坐标系下的位置。 |
+| `/radar/distance` | `std_msgs/Float64` | 需要外部计算并发布，供 `radar_to_serial_node` 转发。 |
+| `/terrain_map` | `sensor_msgs/PointCloud2` | 用于导航的二维地形图。 |
+| `/cmd_vel` | `geometry_msgs/Twist` | Navigation 2 输出的速度指令。 |
+
+## 9. 故障排除
+
+- **雷达无数据**: 检查雷达供电、网线连接，确认 `MID360_config.json` 中的 IP 配置正确，并尝试 ping 雷达 IP。
+- **TF 变换错误**: 使用 `tf2_tools view_frames` 命令生成 TF 树，检查是否存在断连。确认 `bringup.launch.py` 中的静态 TF 发布者参数无误。
+- **串口发送失败**: 确认用户有串口读写权限 (`sudo usermod -a -G dialout $USER`)，并检查启动参数 `serial_port` 是否正确。
+- **导航定位漂移**: 检查里程计 (`/odom`) 是否准确，并确保 `amcl` 参数文件中的地图路径正确。可尝试调大 `controller_server` 中的 `transform_tolerance` 参数。
+
+## 10. 贡献与许可
+
+- **维护者**: [Aurelia-Maris-Crystalthrone]
+- **联系方式**: [3792458256@qq.com]
+- **许可证**: 本项目代码遵循 MIT 协议。请注意，部分依赖项（如 Navigation 2）可能有其自身的许可条款。
