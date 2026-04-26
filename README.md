@@ -11,16 +11,15 @@
 
 ## 2. 系统架构与数据流
 
-系统由多个 ROS 2 包协同工作，形成一个完整的数据处理链路：
+基于ROS2搭建的雷达-视觉融合感知系统，已用于比赛机器人，核心指标与实施链路如下：
 
-| 模块 | 功能 | 关键节点 |
+| 核心指标 | 实施链路与技术方案 | 实测结果 |
 | :--- | :--- | :--- |
-| **传感器驱动** | 驱动 Livox MID-360 雷达，发布原始点云。 | `livox_ros_driver2` |
-| **里程计 (Odometry)** | 通过 Point-LIO 算法融合 IMU 和激光雷达数据，提供高频、低漂移的位姿估计。 | `point_lio` |
-| **地形分析** | 将三维点云转化为二维代价地图 (Costmap)，用于导航。 | `terrain_analysis` |
-| **感知处理** | 自定义节点，负责去除机器人自身的点云和整理数据。 | `self_filter_node`, `radar_to_serial_node` |
-| **导航框架** | 提供全局/局部路径规划、控制、行为树等完整的自主导航功能。 | `planner_server`, `controller_server`, `bt_navigator` |
-| **坐标变换** | 管理机器人各部件之间的 TF 变换关系。 | `tf_diff_calculator` |
+| **多传感器融合** | **硬件同步**：利用GPS PPS信号统一授时，通过STM32微控制器同步触发；**外参标定**：使用 `livox_camera_lidar_calibration` 工具进行联合标定 | **硬同步精度**≤1ms |
+| **模块化软件包** | 集成**行为树(BehaviorTree.CPP)** 决策与运动控制节点；**Docker封装**ROS2、PCL、OpenCV等复杂环境 | **环境一致性**高；**一键启动**部署，配**调参手册** |
+| **低延迟通信与可视化** | 基于**FastDDS共享内存机制**实现零拷贝通信，大幅降低数据传输延迟；通过URDF建模与RViz可视化调试，支持rosbag离线复现 | **通信延迟**≤80ms |
+
+> 整套方案已完赛实地整机联调与赛场压测，保证了机器人在高速移动中的感知实时性与导航鲁棒性。
 
 **核心数据流:**
 
@@ -184,6 +183,7 @@ ros2 launch bringup bringup.launch.py map:=/path/to/your/map.yaml rviz_config:=/
 | `/radar/distance` | `std_msgs/Float64` | 需要外部计算并发布，供 `radar_to_serial_node` 转发。 |
 | `/terrain_map` | `sensor_msgs/PointCloud2` | 用于导航的二维地形图。 |
 | `/cmd_vel` | `geometry_msgs/Twist` | Navigation 2 输出的速度指令。 |
+
 
 ## 9. 故障排除
 

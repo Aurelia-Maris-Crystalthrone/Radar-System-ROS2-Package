@@ -63,18 +63,6 @@ def generate_launch_description():
     )
     rviz_config_file = LaunchConfiguration("rviz_config")
 
-    # 🆕 声明雷达转串口节点的参数
-    declare_serial_port_cmd = DeclareLaunchArgument(
-        'serial_port',
-        default_value='/dev/ttyUSB0',
-        description='Serial port for communication with main controller'
-    )
-    declare_baud_rate_cmd = DeclareLaunchArgument(
-        'baud_rate',
-        default_value='115200',
-        description='Baud rate for serial communication'
-    )
-
     # 指定动作组（包含所有需要并发启动的节点和包含启动）
     bringup_cmd_group = GroupAction([
         # ----- 新增：启动 map_server（生命周期节点）-----
@@ -134,6 +122,7 @@ def generate_launch_description():
                 'map': LaunchConfiguration('map')
             }.items()
         ),
+
         # 启动 livox_ros_driver2
         IncludeLaunchDescription(
             launch_description_source=PythonLaunchDescriptionSource([
@@ -192,20 +181,6 @@ def generate_launch_description():
             output='screen',
             parameters=[{'use_sim_time': use_sim_time}]
         ),
-
-        # 🆕 启动雷达数据转串口节点
-        Node(
-            package='bringup',
-            executable='radar_to_serial_node',
-            name='radar_to_serial_node',
-            output='screen',
-            parameters=[{
-                'serial_port': LaunchConfiguration('serial_port'),
-                'baud_rate': LaunchConfiguration('baud_rate'),
-                'use_sim_time': use_sim_time
-            }]
-        ),
-
         # 启动 rviz2（使用声明的配置文件）
         Node(
             package="rviz2",
@@ -240,10 +215,6 @@ def generate_launch_description():
     ld.add_action(declare_params_file_cmd)
     ld.add_action(declare_rviz_config_file_cmd)
     ld.add_action(declare_tf_config_file_cmd)
-
-    # 🆕 添加串口参数声明
-    ld.add_action(declare_serial_port_cmd)
-    ld.add_action(declare_baud_rate_cmd)
 
     # 添加启动所有节点的动作组
     ld.add_action(bringup_cmd_group)
