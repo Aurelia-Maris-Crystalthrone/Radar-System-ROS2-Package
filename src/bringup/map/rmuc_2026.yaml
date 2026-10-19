@@ -1,4 +1,5 @@
-image: rmuc_2026.pgm
+# 二进制数据实际为 PNG，扩展名已同步修正为 .png
+image: rmuc_2026.png
 mode: trinary
 resolution: 0.05
 origin: [ -4.0, -7.5, 0]

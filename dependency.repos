@@ -1,0 +1,28 @@
+# 本工作空间依赖、但**不随本仓库发布**的功能包。
+#
+# 用法（在 ~/rm_ws/src 克隆本仓库后，回到 ~/rm_ws 执行）：
+#   pip3 install vcstool
+#   vcs import src < src/Radar-System-ROS2-Package/dependency.repos
+#
+# 路径相对于执行 vcs import 时的 src 目录。
+
+repositories:
+  # 激光惯性里程计，产出 /Odometry (aft_mapped_to_init) 与 /cloud_registered
+  point_lio:
+    type: git
+    url: https://github.com/hku-mars/Point-LIO.git
+    version: main
+
+  # Nav2 代价地图插件：提供 pb_nav2_costmap_2d::IntensityVoxelLayer
+  # nav2_params_terrain_analysis.yaml 中的 intensity_voxel_layer 就来自这里
+  pb_nav2_plugins:
+    type: git
+    url: https://github.com/SMBU-PolarBear-Robotics-Team/pb_nav2_plugins.git
+    version: main
+
+  # 地形分析：产出 local/global costmap 消费的 /terrain_map 与 /terrain_map_ext
+  # 本仓库的 nav2_params_terrain_analysis.yaml 直接订阅这两个话题
+  terrain_analysis:
+    type: git
+    url: https://github.com/SMBU-PolarBear-Robotics-Team/pb2025_sentry_nav.git
+    version: main

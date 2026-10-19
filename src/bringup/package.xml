@@ -2,8 +2,8 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>bringup</name>
-  <version>0.0.0</version>
-  <description>Robot Master bringup package with modular launch system</description>
+  <version>0.1.0</version>
+  <description>RobotMaster 英雄机器人雷达感知与导航集成启动包</description>
   <maintainer email="chen.junn@outlook.com">chenjun</maintainer>
   <license>Apache License 2.0</license>
 
@@ -22,8 +22,9 @@
   <depend>libpcl-all-dev</depend>
   <depend>std_msgs</depend>
   <depend>nav_msgs</depend>
-  <depend>serial</depend>
-  <!-- 外部包依赖 -->
+  <!-- 串口库已 vendor 到 lib/serial 并以 serial_vendor target 静态链接，不再依赖外部 serial 包 -->
+
+  <!-- 外部包依赖（通过 dependency.repos + vcstool 拉取，见仓库根目录） -->
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>ament_index_python</exec_depend>

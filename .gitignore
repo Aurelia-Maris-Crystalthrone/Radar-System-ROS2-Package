@@ -1,0 +1,26 @@
+# ROS 2 colcon 产物
+build/
+install/
+log/
+*.egg-info/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.pyc
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+
+# lvox SDK / 编译中间物
+*.o
+*.so.*
+
+# 编辑器（工程内自带的那份 .vscode/c_cpp_properties.json 已删除，随本机环境自配）
+.vscode/*
+!.vscode/README.md
+
+# 系统噪声
+.DS_Store
+*.swp

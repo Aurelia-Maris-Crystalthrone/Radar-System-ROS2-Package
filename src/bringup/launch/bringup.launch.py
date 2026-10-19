@@ -54,13 +54,6 @@ def generate_launch_description():
         description="Full path to the RViz config file to use",
     )
 
-    # TF配置参数文件
-    tf_config_file = LaunchConfiguration('tf_config_file')
-    declare_tf_config_file_cmd = DeclareLaunchArgument(
-        'tf_config_file',
-        default_value=os.path.join(bringup_dir, 'config', 'tf_config.yaml'),
-        description='Full path to TF configuration file'
-    )
     rviz_config_file = LaunchConfiguration("rviz_config")
 
     # 指定动作组（包含所有需要并发启动的节点和包含启动）
@@ -166,20 +159,54 @@ def generate_launch_description():
             ]),
             launch_arguments={'use_sim_time': use_sim_time}.items()
         ),
-        # 5. 启动self_filter_node
+        # 6. 自滤波：input_topic 指向 Point-LIO 实际输出的 /cloud_registered，
+        #    CropBox 六个边界在这里改即可，不用再动源码重编译
         Node(
-                package='bringup',  
-                executable='self_filter_node', 
-                name='self_filter_node',
-                output='screen',
-                parameters=[{'use_sim_time': use_sim_time}
-            ]),
+            package='bringup',
+            executable='self_filter_node',
+            name='self_filter_node',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'input_topic': '/cloud_registered',
+                'output_topic': '/pointclouds_self_filter',
+                'crop_min_x': -0.1625,
+                'crop_min_y': 0.0,
+                'crop_min_z': -0.3,
+                'crop_max_x': 0.1625,
+                'crop_max_y': 0.325,
+                'crop_max_z': 0.4,
+            }],
+        ),
         Node(
             package='bringup',
             executable='tf_diff_calculator',
             name='tf_diff_calculator',
             output='screen',
-            parameters=[{'use_sim_time': use_sim_time}]
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                # 里程计帧这里是 odometry（map->odometry->base_footprint），不是 odom
+                'source_frame': 'odometry',
+                'target_frame': 'enermy_base',
+                'output_topic': '/radar/target_position',
+                'publish_period_ms': 100,
+            }]
+        ),
+        # 7. 串口下发：默认订阅 tf_diff_calculator 的 /radar/target_position，
+        #    距离由 target 与 base_point 就地算，不再等外部 /radar/distance
+        Node(
+            package='bringup',
+            executable='radar_to_serial_node',
+            name='radar_to_serial_node',
+            output='screen',
+            parameters=[{
+                'use_sim_time': use_sim_time,
+                'serial_port': '/dev/ttyUSB0',
+                'baud_rate': 115200,
+                'target_topic': '/radar/target_position',
+                'send_period_ms': 50,
+                'max_data_age_sec': 0.5,
+            }]
         ),
         # 启动 rviz2（使用声明的配置文件）
         Node(
@@ -214,7 +241,6 @@ def generate_launch_description():
     ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_params_file_cmd)
     ld.add_action(declare_rviz_config_file_cmd)
-    ld.add_action(declare_tf_config_file_cmd)
 
     # 添加启动所有节点的动作组
     ld.add_action(bringup_cmd_group)

@@ -27,12 +27,10 @@ find_package(sensor_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
-find_package(serial REQUIRED)
 # ============ 添加PCL依赖 ============
 find_package(PCL REQUIRED)
 if(PCL_FOUND)
   message(STATUS "PCL found: version ${PCL_VERSION}")
-  # 包含PCL头文件路径
   include_directories(${PCL_INCLUDE_DIRS})
 endif()
 
@@ -43,16 +41,18 @@ find_package(pcl_conversions REQUIRED)
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIRS})
 
-# ============ 添加点云过滤节点 ============
-add_executable(self_filter_node
-  src/self_filter_node.cpp  # 这是独立的文件
-)
-add_executable(tf_diff_calculator
-  src/tf_diff_calculator.cpp  # 这是独立的文件
-)
-add_executable(radar_to_serial_node src/radar_to_serial_node.cpp)
+# ============ 桥接头文件搜索路径 ============
+# 注意：原实现写的是 target_include_directories(${PROJECT_NAME} ...)，但本包没有任何
+# 名为 bringup 的 target，CMake 配置阶段就会报 "Cannot specify include directories
+# for target \"bringup\" which is not built by this project"。这里改为显式挂在用到
+# 头文件的目标上。
+set(BRINGUP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-target_link_libraries(radar_to_serial_node serial) 
+# ============ 添加点云相关节点 ============
+add_executable(self_filter_node
+  src/self_filter_node.cpp
+)
+target_include_directories(self_filter_node PRIVATE ${BRINGUP_INCLUDE_DIR})
 target_link_libraries(self_filter_node
   ${rclcpp_LIBRARIES}
   ${tf2_ros_LIBRARIES}
@@ -63,18 +63,6 @@ target_link_libraries(self_filter_node
   ${PCL_LIBRARIES}
   ${pcl_conversions_LIBRARIES}
 )
-target_link_libraries(tf_diff_calculator
-  ${rclcpp_LIBRARIES}
-  ${tf2_ros_LIBRARIES}
-  ${geometry_msgs_LIBRARIES}
-  ${tf2_LIBRARIES}
-  ${tf2_geometry_msgs_LIBRARIES}
-)
-target_include_directories(${PROJECT_NAME} PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include/${PROJECT_NAME}>
-)
-
 ament_target_dependencies(self_filter_node
   rclcpp
   tf2_ros
@@ -85,6 +73,10 @@ ament_target_dependencies(self_filter_node
   pcl_conversions
 )
 
+add_executable(tf_diff_calculator
+  src/tf_diff_calculator.cpp
+)
+target_include_directories(tf_diff_calculator PRIVATE ${BRINGUP_INCLUDE_DIR})
 ament_target_dependencies(tf_diff_calculator
   rclcpp
   tf2
@@ -93,6 +85,8 @@ ament_target_dependencies(tf_diff_calculator
   geometry_msgs
 )
 
+add_executable(radar_to_serial_node src/radar_to_serial_node.cpp)
+target_include_directories(radar_to_serial_node PRIVATE ${BRINGUP_INCLUDE_DIR})
 ament_target_dependencies(radar_to_serial_node
   rclcpp
   std_msgs
@@ -100,20 +94,26 @@ ament_target_dependencies(radar_to_serial_node
 )
 
 # ========== 内嵌 serial 库 ==========
+# 目标名不能再用 `serial`：一旦系统里装了 ros-humble-serial，`find_package(serial)`
+# 导出的 target 会与 add_library(serial) 撞名；这里统一改名 serial_vendor，并去掉
+# 那个多余的 find_package(serial REQUIRED)。
 set(SERIAL_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/serial)
 
-add_library(serial STATIC
+add_library(serial_vendor STATIC
   ${SERIAL_SRC_DIR}/src/serial.cc
   ${SERIAL_SRC_DIR}/src/impl/unix.cc
   ${SERIAL_SRC_DIR}/src/impl/list_ports/list_ports_linux.cc
 )
 
-target_include_directories(serial PUBLIC
+target_include_directories(serial_vendor PUBLIC
   $<BUILD_INTERFACE:${SERIAL_SRC_DIR}/include>
 )
 
 find_package(Threads REQUIRED)
-target_link_libraries(serial PRIVATE Threads::Threads udev)
+target_link_libraries(serial_vendor PRIVATE Threads::Threads udev)
+target_compile_features(serial_vendor PUBLIC cxx_std_11)
+
+target_link_libraries(radar_to_serial_node serial_vendor)
 # ====================================
 
 install(TARGETS
@@ -140,7 +140,7 @@ ament_export_dependencies(
   tf2_geometry_msgs
   pcl_conversions
   std_msgs
-  serial
 )
+ament_export_include_directories(include)
 
 ament_package()

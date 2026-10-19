@@ -1,199 +1,188 @@
 # RM_LIDAR 雷达感知与导航集成模块 (ROS 2)
 
 [![ROS 2](https://img.shields.io/badge/ROS_2-Humble-blue)](https://docs.ros.org/en/humble/index.html)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue)](LICENSE)
 
 ## 1. 项目概述
 
-本项目是一个专为 **RobotMaster 超级对抗赛 2026** 英雄机器人设计的集成化 ROS 2 工作空间。它集成了基于 **Livox MID-360** 激光雷达的实时环境感知、激光惯性里程计、自定义感知数据处理以及完整的 Navigation 2 导航框架。
+一个服务于 **RoboMaster 超级对抗赛英雄机器人** 的 ROS 2（Ubuntu 22.04 + Humble）上位机集成工作空间。
 
-其核心目标是为下位机（如弹道解算单元）提供经过处理的**实时距离、位置数据**，并支持机器人在比赛场地内进行自主导航与避障。
+- **输入**：Livox MID-360 激光雷达点云（`sensor_msgs/PointCloud2`）。
+- **中间**：Point-LIO 做激光惯性里程计，两个坐标转换包把位姿/点云统一到 Nav2 要求的坐标系。
+- **输出**：
+  - 一路进 **Nav2**（代价地图 + 规划 + 控制），做自主导航与避障；
+  - 一路经 **自定义串口协议** 把目标位置/距离下发给下位机 MCU（弹道解算）。
+
+> **关于命名**：仓库名含 "Radar"，但传感器是 **Livox MID-360 激光雷达（LiDAR）**，不是毫米波雷达。命名沿用队内工程习惯。
+
+### 自研 vs 集成：边界说明
+
+本仓库的价值主要在**系统集成与接口层**，而非算法。自研代码约 **400 行 C++**，分布如下：
+
+| 部分 | 行数 | 性质 |
+| :--- | :--- | :--- |
+| `src/bringup/src/*.cpp`、`include/bringup/radar_data_converter.hpp` | ~400 | **自研**：串口协议、TF 差值节点、车体自滤波 |
+| `src/bringup/launch/`、`src/bringup/config/` | ~500 | **自研/配置**：系统集成、Nav2 参数、TF 铺设 |
+| `src/livox_ros_driver2/` | 4295 | Livox 官方 ROS 2 驱动（搬运，MIT） |
+| `src/bringup/lib/serial/` | 4196 | `wjwwood/serial` 串口库（vendored，MIT） |
+| `src/loam_interface/`、`src/sensor_scan_generation/` | 546 | 源自 Lihan Chen 等的同名包，**本仓库仅调整了坐标系与话题参数**（Apache-2.0） |
+
+第三方组件清单与许可证见 [`NOTICE.md`](NOTICE.md)。
 
 ## 2. 系统架构与数据流
 
-基于ROS2搭建的雷达-视觉融合感知系统，已用于比赛机器人，核心指标与实施链路如下：
-
-| 核心指标 | 实施链路与技术方案 | 实测结果 |
-| :--- | :--- | :--- |
-| **多传感器融合** | **硬件同步**：利用GPS PPS信号统一授时，通过STM32微控制器同步触发；**外参标定**：使用 `livox_camera_lidar_calibration` 工具进行联合标定 | **硬同步精度**≤1ms |
-| **模块化软件包** | 集成**行为树(BehaviorTree.CPP)** 决策与运动控制节点；**Docker封装**ROS2、PCL、OpenCV等复杂环境 | **环境一致性**高；**一键启动**部署，配**调参手册** |
-| **低延迟通信与可视化** | 基于**FastDDS共享内存机制**实现零拷贝通信，大幅降低数据传输延迟；通过URDF建模与RViz可视化调试，支持rosbag离线复现 | **通信延迟**≤80ms |
-
-> 整套方案已完赛实地整机联调与赛场压测，保证了机器人在高速移动中的感知实时性与导航鲁棒性。
-
-**核心数据流:**
-
 ```mermaid
 graph TD
-    A[Livox MID-360] -->|/livox/lidar| B(point_lio)
-    A -->|/livox/lidar| E(sensor_scan_generation)
-    B -->|/Odometry| C(loam_interface)
-    C -->|/cloud_registered| D(terrain_analysis)
-    D -->|/terrain_map| F(Nav2 Costmap)
-    C -->|/aft_mapped_to_init| G(tf_diff_calculator)
-    A -->|/livox/lidar| H(self_filter_node)
-    G -->|/radar/target_position| I(radar_to_serial_node)
-    H -->|/pointclouds_self_filter| I
-    I -->|Serial Data| J[下位机 (MCU)]
+    A[Livox MID-360] -->|/livox/lidar| B[livox_ros_driver2]
+    B -->|/livox/lidar| C[point_lio<br/>外部依赖]
+    C -->|/cloud_registered| D[loam_interface]
+    C -->|/Odometry| D
+    D -->|/registered_scan<br/>/lidar_odometry| E[sensor_scan_generation]
+    E -->|TF: odometry→base_footprint<br/>/odometry| F[Nav2 Costmap]
+    E -->|TF: odometry→base_footprint<br/>/odometry| G[tf_diff_calculator]
+    B -->|点云| H[terrain_analysis<br/>外部依赖]
+    H -->|/terrain_map<br/>/terrain_map_ext| F
+    C -->|/cloud_registered| I[self_filter_node]
+    I -->|/pointclouds_self_filter| J[感知/可视化]
+    G -->|/radar/target_position| K[radar_to_serial_node]
+    K -->|串口 49B 帧 @20Hz| L[下位机 MCU]
+    F -->|/cmd_vel| M[底盘]
 ```
 
-### 项目文件结构
+> `point_lio` 与 `terrain_analysis` 不随本仓库发布，见 [`dependency.repos`](dependency.repos)。
+
+## 3. 自研节点说明
+
+| 节点 | 功能 | 主要 ROS 参数 |
+| :--- | :--- | :--- |
+| `self_filter_node` | 用 PCL `CropBox` 抠掉机器人本体点云，避免把自身结构当成障碍物。这是**纯几何空间裁剪**，不含点云聚类/语义分割。 | `input_topic`(默认 `/cloud_registered`)、`output_topic`、`crop_min_x/y/z`、`crop_max_x/y/z`、`output_frame` |
+| `tf_diff_calculator` | 以 10 Hz 查询两个坐标系间的变换，把平移部分作为 `PointStamped` 发布，即"目标位置"。 | `source_frame`(默认 `odometry`)、`target_frame`(默认 `enermy_base`)、`publish_period_ms`、`tf_timeout_sec` |
+| `radar_to_serial_node` | 把目标位置、基准点、距离打包成自定义帧，按 20 Hz 走串口下发给 MCU。距离由 `target-base_point` 的欧氏范数就地计算，不依赖外部话题。 | `serial_port`、`baud_rate`、`target_topic`、`base_point_x/y/z`、`send_period_ms`、`max_data_age_sec` |
+
+设计要点：
+
+1. **目标位置已经表达在 `enermy_base` 坐标系下**，因此"基地基准点"就是该坐标系原点 `(0,0,0)`，外部再输入 base_point 只是可选覆盖。改参数即可，不需改代码。
+2. **陈旧数据一律丢弃**：`max_data_age_sec` 之外的数据不组帧，绝不把过期位置发给下位机做弹道解算。
+3. **所有帧名/话题/边界值都是 ROS 参数**，现场调参不需要重新编译。
+
+## 4. 数据维度速查
+
+| 数据 | 消息类型 | 维度 / 结构 | 说明 |
+| :--- | :--- | :--- | :--- |
+| 原始点云 | `sensor_msgs/PointCloud2` | **N 点 × 7 字段**；`point_step = 26 B`（`#pragma pack(1)`） | 字段：`x,y,z`(FLOAT32)、`intensity`(FLOAT32)、`tag`(UINT8)、`line`(UINT8)、`timestamp`(FLOAT64)。`height=1`，`width=N` |
+| IMU | `sensor_msgs/Imu` | **10 维**：姿态四元数 4 + 角速度 3 + 线加速度 3 | 话题 `livox/imu`，另含 3 个 9 元协方差矩阵 |
+| 里程计 | `nav_msgs/Odometry` | **7 + 6 维**：pose(x,y,z + 四元数 4)、twist(线速度 3 + 角速度 3) | 另含 2 个 36 元协方差矩阵 |
+| 坐标变换 | `geometry_msgs/TransformStamped` | **6 自由度**：平移 3 + 四元数旋转 4 | tf2 缓冲里即为 SE(3) 刚体变换 |
+| 自滤波点云 | `sensor_msgs/PointCloud2` | **M 点 × 3 字段**（`pcl::PointXYZ`，x/y/z FLOAT32），M ≤ N | 已剔除车体包围盒内的点 |
+| 目标位置 | `geometry_msgs/PointStamped` | **3 维** 笛卡尔坐标 | `/radar/target_position`，10 Hz |
+| 静态地图 | `nav_msgs/OccupancyGrid` | **560 × 300 格 = 168000 格**，每格 int8（-1/0~100） | `resolution = 0.05 m` ⇒ 实际 28 × 15 m |
+| 局部代价地图 | `nav2_msgs/Costmap` | **60 × 40 格 = 2400 格**（3 × 2 m @ 0.05 m，rolling window） | 每格代价 0~255 |
+| 全局代价地图 | `nav2_msgs/Costmap` | **560 × 300 格**（随地图），叠加 **垂向 16 层体素 × 0.05 m = 0.8 m** | 即常说的 **2.5D**：2D 栅格 + 体素柱高度 |
+| 串口下行帧 | 自定义二进制 | **9 个标量 → 44 B payload**，整帧 **49 B** | 见下一节 |
+
+一句话总结：**点云是 7 维/点、位姿是 6 自由度、地图是 2.5D 栅格、下发给你 MCU 的是 9 个标量。**
+
+## 5. 串口下行协议
+
+准确帧格式（共 **49 字节**）：
 
 ```
-Radar-System-ROS2-Package/
-├── bringup/                          # 核心启动与集成包
-│   ├── CMakeLists.txt
-│   ├── package.xml
-│   ├── launch/
-│   │   ├── bringup.launch.py        # 系统总启动文件
-│   │   ├── navigation_launch.py     # Nav2 导航子启动
-│   │   └── pointlio_launch.py       # Point-LIO 子启动
-│   ├── config/
-│   │   ├── nav2_params_terrain_analysis.yaml  # 导航参数配置
-│   │   └── mapper_params_online.yaml          # 定位建图参数
-│   ├── src/
-│   │   ├── self_filter_node.cpp               # 自身点云滤除节点
-│   │   ├── radar_to_serial_node.cpp           # 串口数据转发节点
-│   │   └── sensor_scan_generation_node.cpp    # 扫描生成节点
-│   └── include/
-│       └── bringup/
-├── terrain_analysis/                 # 地形分析包
-│   ├── CMakeLists.txt
-│   ├── package.xml
-│   └── src/
-│       └── terrain_analysis.cpp
-├── loam_interface/                   # 里程计接口适配包
-│   ├── CMakeLists.txt
-│   ├── package.xml
-│   └── src/
-│       └── loam_interface_node.cpp
-├── point_lio/                        # Point-LIO 激光惯性里程计
-│   ├── CMakeLists.txt
-│   ├── package.xml
-│   ├── include/point_lio/
-│   └── src/
-├── livox_ros_driver2/                # Livox 雷达 ROS 2 驱动
-│   ├── CMakeLists.txt
-│   ├── package.xml
-│   ├── launch_ROS2/
-│   ├── config/
-│   │   └── MID360_config.json        # 雷达网络配置
-│   └── src/
-├── sensor_scan_generation/           # 扫描数据生成包
-│   ├── CMakeLists.txt
-│   └── package.xml
-├── tf_diff_calculator/               # TF 坐标差值计算包
-│   ├── CMakeLists.txt
-│   └── package.xml
-├── navigation2/                      # Nav2 官方包（作为子模块或拷贝）
-│   └── (nav2_* 系列包)
-├── README.md
-└── LICENSE
+偏移:  0        1    2     3 .......................... 46   47       48
+       +--------+----+----+============================+----+--------+
+字节:  | 0xAA   | LEN_H |  | payload (44 B)            |XOR | 0x55   |
+       +--------+----+----+============================+----+--------+
+          1B      1B   1B            44B                 1B     1B
 ```
 
-> **说明**：实际开发中主要关注 `bringup` 包内的启动与配置文件，以及 `livox_ros_driver2/config/MID360_config.json` 中的雷达网络设置。
+| 偏移 | 长度 | 内容 |
+| :--- | :--- | :--- |
+| 0 | 1 | 帧头 `0xAA` |
+| 1 | 1 | payload 长度高字节（当前固定 0x00） |
+| 2 | 1 | payload 长度低字节（当前固定 0x2C = 44） |
+| 3–46 | 44 | payload（见下表） |
+| 47 | 1 | XOR 校验（对 payload 逐字节异或） |
+| 48 | 1 | 帧尾 `0x55` |
 
-## 3. 节点详解 (bringup 包)
+payload 布局：
 
-此部分详细说明了 `bringup` 包中实现的自定义功能节点。
+| 顺序 | 字段 | 类型 | 字节 |
+| :--- | :--- | :--- | :--- |
+| 1 | `distance` | double | 8 |
+| 2–4 | `position_x/y/z` | float × 3 | 12 |
+| 5–7 | `base_point_x/y/z` | float × 3 | 12 |
+| 8–10 | `dx/dy/dz`（position − base_point） | float × 3 | 12 |
 
-- **`self_filter_node`**: 通过一个固定的立方体范围 (`CropBox`) 滤除属于机器人本体的点云。这对于防止机器人在导航时将自身部件误识别为障碍物至关重要。
-- **`tf_diff_calculator`**: 一个简单的 TF 监听节点。它以 10Hz 的频率查询 `odom` 坐标系与 `enermy_base` 坐标系之间的变换，并将其作为 `PointStamped` 消息发布到 `/radar/target_position` 话题。
-- **`radar_to_serial_node`**: 数据聚合与通信节点。它订阅 `/radar/distance`、`/radar/position` 和 `/radar/base_point` 三个话题，将数据整合后，通过配置的串口（默认 `/dev/ttyUSB0`, 115200 波特率）以 20Hz 的频率发送给下位机。
+带宽核算：115200 bps 8N1 ⇒ 11520 B/s；49 B × 20 Hz = 980 B/s，占用约 **8.5%**，余量充足。
 
-## 4. 环境与硬件要求
+## 6. TF 树
 
-### 4.1 软件依赖
+```
+map ─(static, 零变换)─→ odometry
+odometry ─(static, x=21.5)─→ enermy_base
+odometry ─(dynamic, sensor_scan_generation)─→ base_footprint
+base_footprint ─(static, 0, -0.1682, 0.396)─→ livox_frame
+aft_mapped ─(static, 零变换)─→ body
+```
 
-- **操作系统**: Ubuntu 22.04
-- **ROS 2 发行版**: Humble
-- **核心依赖**:
-  - `ros-humble-nav2-*`
-  - `ros-humble-behaviortree-cpp-v3`
-  - `python3-transforms3d`, `python3-numpy`, `python3-matplotlib`
-  - `pcl_conversions` (点云处理)
-  - `serial` (串口通信)
+> 已知问题：`bringup.launch.py` 里还有一条 `base_footprint → odom` 的静态变换，方向与传统 `map→odom→base_link` 相反，且 `odom` 与 `odometry` 是两个不同的帧。清理前请勿依赖 `odom`。
 
-### 4.2 硬件要求
-
-- **激光雷达**: Livox MID-360
-- **主控平台**: NVIDIA Jetson Orin / Xavier (推荐) 或性能相当的 x86 工控机
-- **通信接口**: 以太网 (连接雷达) 与 UART/CAN (通过串口与下位机通信)
-
-## 5. 快速开始
-
-### 5.1 创建工作空间并克隆代码
+## 7. 外部依赖（不随仓库发布）
 
 ```bash
-mkdir -p ~/rm_ws/src
-cd ~/rm_ws/src
-git clone https://github.com/Aurelia-Maris-Crystalthrone/Radar-System-ROS2-Package.git .
-```
-
-### 5.2 安装依赖
-
-```bash
-# 安装 ROS 2 依赖
+pip3 install vcstool
 cd ~/rm_ws
+vcs import src < src/Radar-System-ROS2-Package/dependency.repos
+```
+
+| 功能包 | 用途 |
+| :--- | :--- |
+| `point_lio` | 激光惯性里程计（`/Odometry`、`/cloud_registered`） |
+| `pb_nav2_plugins` | 提供 `pb_nav2_costmap_2d::IntensityVoxelLayer` |
+| `terrain_analysis` | 产出 `/terrain_map`、`/terrain_map_ext` 供代价地图订阅 |
+
+## 8. 编译与运行
+
+```bash
+mkdir -p ~/rm_ws/src && cd ~/rm_ws/src
+git clone https://github.com/Aurelia-Maris-Crystalthrone/Radar-System-ROS2-Package.git
+cd ~/rm_ws
+vcs import src < src/Radar-System-ROS2-Package/dependency.repos
 rosdep install --from-paths src --ignore-src -r -y
-
-# 安装 Python 依赖
-pip3 install transforms3d numpy matplotlib pyserial
-```
-
-### 5.3 编译工作空间
-
-```bash
-cd ~/rm_ws
+pip3 install transforms3d numpy matplotlib
 colcon build --symlink-install
 source install/setup.bash
-```
-
-## 6. 配置指南
-
-启动前，请根据实际情况修改以下配置文件：
-
-1.  **雷达 IP 配置**: 修改 `src/livox_ros_driver2/config/MID360_config.json`，确保 `lidar_configs` 下的 IP 地址与你的雷达一致。
-2.  **TF 变换配置**: 在 `src/bringup/launch/bringup.launch.py` 中，修改 `base_footprint_to_livox_frame` 等静态 TF 发布者的 `arguments` 参数，以匹配雷达在机器人上的实际安装位置。
-3.  **串口配置**: 启动时可通过参数指定串口设备和波特率，或修改启动文件中的默认值 (`/dev/ttyUSB0`, `115200`)。
-4.  **导航参数**: 根据机器人尺寸和性能，调整 `src/bringup/config/nav2_params_terrain_analysis.yaml` 中的机器人半径 (`robot_radius`)、速度 (`max_velocity`) 等参数。
-5.  **自滤波范围**: 在 `src/bringup/src/self_filter_node_segmentation.cpp` 中，调整 `CropBox` 的 `min_pt` 和 `max_pt` 向量值，以确保能精确滤除机器人自身的点云。
-
-## 7. 运行系统
-
-使用主启动文件 `bringup.launch.py` 即可启动所有模块：
-
-```bash
-# 启动全部功能
 ros2 launch bringup bringup.launch.py
-
-# 带参数启动示例：指定地图和RViz配置文件
-ros2 launch bringup bringup.launch.py map:=/path/to/your/map.yaml rviz_config:=/path/to/your/rviz.rviz
 ```
 
-启动文件将按顺序启动雷达驱动、定位、感知处理和导航框架。
+雷达 IP / 挂载位姿 / 串口号分别在
+`src/livox_ros_driver2/config/MID360_config.json`、
+`src/bringup/launch/bringup.launch.py`（静态 TF）、
+`src/bringup/launch/bringup.launch.py`（`serial_port` / `baud_rate`）中修改。
 
-## 8. 关键 ROS 话题
+## 9. 关键话题
 
-| 话题名 | 消息类型 | 描述 |
-| :--- | :--- | :--- |
-| `/livox/lidar` | `sensor_msgs/PointCloud2` | 原始点云数据。 |
-| `/cloud_registered` | `sensor_msgs/PointCloud2` | 经里程计校正后的点云。 |
-| `/radar/target_position` | `geometry_msgs/PointStamped` | 目标点在 `enermy_base` 坐标系下的位置。 |
-| `/radar/distance` | `std_msgs/Float64` | 需要外部计算并发布，供 `radar_to_serial_node` 转发。 |
-| `/terrain_map` | `sensor_msgs/PointCloud2` | 用于导航的二维地形图。 |
-| `/cmd_vel` | `geometry_msgs/Twist` | Navigation 2 输出的速度指令。 |
+| 话题 | 消息类型 | 发布者 | 频率 |
+| :--- | :--- | :--- | :--- |
+| `/livox/lidar` | `PointCloud2` | livox_ros_driver2 | 10–20 Hz |
+| `/livox/imu` | `Imu` | livox_ros_driver2 | ~200 Hz |
+| `/cloud_registered` | `PointCloud2` | point_lio（外部） | 10–20 Hz |
+| `/Odometry` | `Odometry` | point_lio（外部） | 高（可达 kHz 级） |
+| `/registered_scan` | `PointCloud2`（换系后） | loam_interface | 同点云 |
+| `/lidar_odometry` | `Odometry`（换系后） | loam_interface | 同里程计 |
+| `/odometry` | `Odometry` | sensor_scan_generation | 同里程计 || `/pointclouds_self_filter` | `PointCloud2` | self_filter_node | 同点云 |
+| `/radar/target_position` | `PointStamped` | tf_diff_calculator | 10 Hz |
+| `/terrain_map`, `/terrain_map_ext` | `PointCloud2` | terrain_analysis（外部） | 10 Hz |
+| `/cmd_vel` | `Twist` | Nav2 controller_server | 随控制器 |
 
+## 10. 已知缺口 / TODO
 
-## 9. 故障排除
+- `map → odometry` 为**零**静态变换：未启用 AMCL / `robot_localization`，上电默认位于地图原点。
+- `enermy_base` 是硬编码 `x=21.5` 的静态 TF：目标位置来自先验坐标，**不是感知检测的结果**。
+- 尚未包含 Dockerfile；中间件使用默认 DDS 配置，未做共享内存 / 零拷贝调优。
+- 仓库历史为单次提交，缺少迭代过程；后续建议拆分为功能化的多次提交。
+- `global_costmap` 的 `intensity_voxel_layer` 依赖第三方插件，换用官方 `voxel_layer` 需同步改参数。
 
-- **雷达无数据**: 检查雷达供电、网线连接，确认 `MID360_config.json` 中的 IP 配置正确，并尝试 ping 雷达 IP。
-- **TF 变换错误**: 使用 `tf2_tools view_frames` 命令生成 TF 树，检查是否存在断连。确认 `bringup.launch.py` 中的静态 TF 发布者参数无误。
-- **串口发送失败**: 确认用户有串口读写权限 (`sudo usermod -a -G dialout $USER`)，并检查启动参数 `serial_port` 是否正确。
-- **导航定位漂移**: 检查里程计 (`/odom`) 是否准确，并确保 `amcl` 参数文件中的地图路径正确。可尝试调大 `controller_server` 中的 `transform_tolerance` 参数。
+## 11. 许可与第三方声明
 
-## 10. 贡献与许可
-
-- **维护者**: [Aurelia-Maris-Crystalthrone]
-- **联系方式**: [3792458256@qq.com]
-- **许可证**: 本项目代码遵循 MIT 协议。请注意，部分依赖项（如 Navigation 2）可能有其自身的许可条款。
+本仓库自研部分遵循 **Apache-2.0**（见 [`LICENSE`](LICENSE)）。所包含/依赖的第三方组件及其许可证详见 [`NOTICE.md`](NOTICE.md)。
+其中 Point-LIO 采用 GPLv2，商业部署前请确认许可要求。
