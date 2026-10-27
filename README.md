@@ -26,6 +26,7 @@
 | `src/livox_ros_driver2/` | 4295 | Livox 官方 ROS 2 驱动（搬运，MIT） |
 | `src/bringup/lib/serial/` | 4196 | `wjwwood/serial` 串口库（vendored，MIT） |
 | `src/loam_interface/`、`src/sensor_scan_generation/` | 546 | 源自 Lihan Chen 等的同名包，**本仓库仅调整了坐标系与话题参数**（Apache-2.0） |
+| `src/terrain_analysis/`、`src/terrain_analysis_ext/` | 1496 | 源自 CMU 地面移动机器人栈的同名包，**参数改用 `nav2_params_terrain_analysis.yaml` 下发**（BSD） |
 
 第三方组件清单与许可证见 [`NOTICE.md`](NOTICE.md)。
 
@@ -40,7 +41,7 @@ graph TD
     D -->|/registered_scan<br/>/lidar_odometry| E[sensor_scan_generation]
     E -->|TF: odometry→base_footprint<br/>/odometry| F[Nav2 Costmap]
     E -->|TF: odometry→base_footprint<br/>/odometry| G[tf_diff_calculator]
-    B -->|点云| H[terrain_analysis<br/>外部依赖]
+    B -->|点云| H[terrain_analysis<br/>terrain_analysis_ext]
     H -->|/terrain_map<br/>/terrain_map_ext| F
     C -->|/cloud_registered| I[self_filter_node]
     I -->|/pointclouds_self_filter| J[感知/可视化]
@@ -49,7 +50,8 @@ graph TD
     F -->|/cmd_vel| M[底盘]
 ```
 
-> `point_lio` 与 `terrain_analysis` 不随本仓库发布，见 [`dependency.repos`](dependency.repos)。
+> `point_lio`、`pb_nav2_plugins` 与 `pb_omni_pid_pursuit_controller` 不随本仓库发布，
+> 见 [`dependency.repos`](dependency.repos)。`terrain_analysis` 与其 `_ext` 版本已随本仓库发布。
 
 ## 3. 自研节点说明
 
@@ -138,7 +140,10 @@ vcs import src < src/Radar-System-ROS2-Package/dependency.repos
 | :--- | :--- |
 | `point_lio` | 激光惯性里程计（`/Odometry`、`/cloud_registered`） |
 | `pb_nav2_plugins` | 提供 `pb_nav2_costmap_2d::IntensityVoxelLayer` |
-| `terrain_analysis` | 产出 `/terrain_map`、`/terrain_map_ext` 供代价地图订阅 |
+| `pb_omni_pid_pursuit_controller` | 提供 `nav2_params*.yaml` 中 `FollowPath` 用的 `OmniPidPursuitController` |
+
+> 早期版本把 `terrain_analysis` 列为外部依赖，现已 vendored 进本仓库（`src/terrain_analysis`、
+> `src/terrain_analysis_ext`），产出代价地图订阅的 `/terrain_map` 与 `/terrain_map_ext`。
 
 ## 8. 编译与运行
 

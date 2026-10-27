@@ -85,6 +85,14 @@ def generate_launch_description():
         description="Use simulation (Gazebo) clock if true",
     )
 
+    declare_params_file_cmd = DeclareLaunchArgument(
+        "params_file",
+        default_value=os.path.join(
+            bringup_dir, "config", "nav2_params_terrain_analysis.yaml"
+        ),
+        description="Full path to the ROS2 parameters file to use for all launched nodes",
+    )
+
     declare_autostart_cmd = DeclareLaunchArgument(
         "autostart",
         default_value="true",
@@ -115,7 +123,7 @@ def generate_launch_description():
     declare_map_yaml_cmd = DeclareLaunchArgument(
         "map",
         default_value=[
-            TextSubstitution(text=os.path.join(bringup_dir, "map",  "rmuc_2025.yaml")),
+            TextSubstitution(text=os.path.join(bringup_dir, "map",  "rmuc_2026.yaml")),
         ],
         description="Full path to map file to load",
     )
@@ -234,6 +242,30 @@ def generate_launch_description():
         ],
     )
 
+    # 地形分析：产出 /terrain_map（局部代价地图）与 /terrain_map_ext（全局代价地图），
+    # 参数是 nav2_params_terrain_analysis.yaml 里的 terrain_analysis / terrain_analysis_ext 两段
+    start_terrain_analysis_cmd = Node(
+        package="terrain_analysis",
+        executable="terrainAnalysis",
+        name="terrainAnalysis",
+        output="screen",
+        respawn=use_respawn,
+        respawn_delay=2.0,
+        parameters=[configured_params],
+        arguments=["--ros-args", "--log-level", log_level],
+    )
+
+    start_terrain_analysis_ext_cmd = Node(
+        package="terrain_analysis_ext",
+        executable="terrainAnalysisExt",
+        name="terrainAnalysisExt",
+        output="screen",
+        respawn=use_respawn,
+        respawn_delay=2.0,
+        parameters=[configured_params],
+        arguments=["--ros-args", "--log-level", log_level],
+    )
+
     # Create the launch description and populate
     ld = LaunchDescription()
 
@@ -244,7 +276,7 @@ def generate_launch_description():
     # Declare the launch options
     ld.add_action(declare_namespace_cmd)
     ld.add_action(declare_use_sim_time_cmd)
-    # ld.add_action(declare_params_file_cmd)
+    ld.add_action(declare_params_file_cmd)
     ld.add_action(declare_autostart_cmd)
     ld.add_action(declare_use_composition_cmd)
     ld.add_action(declare_container_name_cmd)
@@ -253,8 +285,8 @@ def generate_launch_description():
     ld.add_action(declare_map_yaml_cmd)
 
     # Add the actions to launch all of the navigation nodes
-    # ld.add_action(start_terrain_analysis_cmd)
-    # ld.add_action(start_terrain_analysis_ext_cmd)
+    ld.add_action(start_terrain_analysis_cmd)
+    ld.add_action(start_terrain_analysis_ext_cmd)
     ld.add_action(load_nodes)
     # ld.add_action(load_composable_nodes)
 

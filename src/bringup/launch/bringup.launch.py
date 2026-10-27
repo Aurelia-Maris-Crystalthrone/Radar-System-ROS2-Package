@@ -23,6 +23,7 @@ def generate_launch_description():
 
     # 创建启动配置变量
     use_sim_time = LaunchConfiguration('use_sim_time')
+    params_file = LaunchConfiguration('params_file')
 
     # 声明启动参数
     declare_use_sim_time_cmd = DeclareLaunchArgument(
@@ -112,6 +113,7 @@ def generate_launch_description():
             ]),
             launch_arguments={
                 'use_sim_time': use_sim_time,
+                'params_file': params_file,
                 'map': LaunchConfiguration('map')
             }.items()
         ),

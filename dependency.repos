@@ -20,9 +20,13 @@ repositories:
     url: https://github.com/SMBU-PolarBear-Robotics-Team/pb_nav2_plugins.git
     version: main
 
-  # 地形分析：产出 local/global costmap 消费的 /terrain_map 与 /terrain_map_ext
-  # 本仓库的 nav2_params_terrain_analysis.yaml 直接订阅这两个话题
-  terrain_analysis:
+  # 地形分析已随本仓库发布（src/terrain_analysis、src/terrain_analysis_ext），
+  # 产出 nav2_params_terrain_analysis.yaml 订阅的 /terrain_map 与 /terrain_map_ext。
+  # 原先这里指向一整个 pb2025_sentry_nav 仓库，现由本仓库自带，不再需要。
+
+  # Nav2 跟随控制器：提供 nav2_params*.yaml 中 FollowPath 用的
+  # pb_omni_pid_pursuit_controller::OmniPidPursuitController
+  pb_omni_pid_pursuit_controller:
     type: git
-    url: https://github.com/SMBU-PolarBear-Robotics-Team/pb2025_sentry_nav.git
+    url: https://github.com/SMBU-PolarBear-Robotics-Team/pb_omni_pid_pursuit_controller.git
     version: main

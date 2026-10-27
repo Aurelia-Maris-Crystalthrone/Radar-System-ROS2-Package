@@ -13,6 +13,8 @@
 | `src/loam_interface/` | 源自 Lihan Chen 等人（CMU 地面移动机器人栈）的 `loam_interface`，本仓库仅调整了坐标系与话题参数 | Apache-2.0 |
 | `src/sensor_scan_generation/` | 同上，源自同一套 `sensor_scan_generation` | Apache-2.0 |
 | `src/bringup/config/nav2_params*.yaml` | 结构与参数取法参考 `SMBU-PolarBear-Robotics-Team/pb2025_sentry_nav` | Apache-2.0 / GPLv3（依上游仓库许可） |
+| `src/terrain_analysis/` | 源自 CMU 地面移动机器人栈的 `terrain_analysis`（原作者 Ji Zhang 等），本仓库仅参数经 ROS 参数文件下发 | BSD |
+| `src/terrain_analysis_ext/` | 同上同源的 `terrain_analysis_ext` | BSD |
 
 已在对应目录保留其原始 LICENSE 文件；`loam_interface` 与 `sensor_scan_generation`
 保留了源文件头的 Apache-2.0 copyright 声明，未做删除或改写。
@@ -23,7 +25,7 @@
 | :--- | :--- | :--- |
 | `point_lio`（hku-mars/Point-LIO） | 激光惯性里程计 | GPLv2（商业用途需联系作者） |
 | `pb_nav2_plugins`（SMBU-PolarBear-Robotics-Team） | 提供 `pb_nav2_costmap_2d::IntensityVoxelLayer` | 见上游仓库 |
-| `terrain_analysis` | 产出 `/terrain_map`、`/terrain_map_ext` | 见上游仓库 |
+| `pb_omni_pid_pursuit_controller`（SMBU-PolarBear-Robotics-Team） | 提供 `FollowPath` 用的 `pb_omni_pid_pursuit_controller::OmniPidPursuitController` | 见上游仓库 |
 
 > 注意：Point-LIO 采用 GPLv2。若本工程用于**非研究性的商业部署**，请按 GPLv2 要求
 > 履行相应义务，或替换为许可更宽松的里程计方案（如 FAST-LIO2 系列同样需注意其许可条款）。
