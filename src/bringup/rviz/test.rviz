@@ -91,7 +91,7 @@ Visualization Manager:
           Value: true
         map:
           Value: true
-        odom:
+        odometry:
           Value: true
         tmp:
           Value: true
@@ -102,7 +102,7 @@ Visualization Manager:
       Show Names: true
       Tree:
         map:
-          odom:
+          odometry:
             base_footprint:
               livox_frame:
                 livox_level_frame:

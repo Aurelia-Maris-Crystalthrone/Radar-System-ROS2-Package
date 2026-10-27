@@ -126,7 +126,10 @@ base_footprint ─(static, 0, -0.1682, 0.396)─→ livox_frame
 aft_mapped ─(static, 零变换)─→ body
 ```
 
-> 已知问题：`bringup.launch.py` 里还有一条 `base_footprint → odom` 的静态变换，方向与传统 `map→odom→base_link` 相反，且 `odom` 与 `odometry` 是两个不同的帧。清理前请勿依赖 `odom`。
+> 已修复：此前还存在一条方向相反的 `base_footprint → odom` 静态变换（`odom` 与 `odometry`
+> 是两个不同的帧），现已删除。`base_footprint` 的唯一父帧是 `odometry`，由
+> `sensor_scan_generation` 动态发布；Nav2 参数里的 `robot_base_frame` 统一为 `base_footprint`，
+> 局部/全局代价地图与行为服务器的参考帧统一为 `odometry`。
 
 ## 7. 外部依赖（不随仓库发布）
 

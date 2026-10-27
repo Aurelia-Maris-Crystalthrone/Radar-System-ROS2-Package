@@ -96,12 +96,11 @@ def generate_launch_description():
             name='aft_mapped_to_body',
             arguments=['0', '0', '0', '0', '0', '0', 'aft_mapped', 'body']
         ),
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='base_footprint_to_odom',
-            arguments=['0', '0', '0.446', '0', '0', '0', 'base_footprint', 'odom']
-        ),
+        # 原先这里还有一条 base_footprint -> odom 的静态变换，方向与传统
+        # map -> odom -> base_link 相反，且 odom 已被 odometry 取代。
+        # odometry -> base_footprint 由 sensor_scan_generation 动态发布，
+        # 再给 base_footprint 挂第二个父帧会引发 TF 多权威冲突，故删除。
+
         # 包含导航启动（navigation_launch.py）
         IncludeLaunchDescription(
             launch_description_source=PythonLaunchDescriptionSource([
